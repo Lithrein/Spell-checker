@@ -2,6 +2,7 @@
 #include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <wchar.h>
 
 #include "bloom_filter.h"
@@ -11,12 +12,19 @@
 #define VERSION(VER_NO)     VERSION_STR(VER_NO)
 
 /* Flags des options */
-#define INTERACTIVE         0x01
-#define WORD                0x02
-#define DEFINITION          0x04
-#define ACRONYM             0x08
-#define VERSION             0x10
-#define HELP                0x20
+#define F_INTERACTIVE       0x01
+#define F_WORD              0x02
+#define F_DEFINITION        0x04
+#define F_ACRONYM           0x08
+#define F_VERSION           0x10
+#define F_HELP              0x20
+
+struct flag {
+    int flags;
+    char * word;
+    char * acronyms;
+    char * definitions;
+};
 
 void
 usage (void) {
@@ -50,27 +58,77 @@ version (void) {
     wprintf(fmt, ver);
 }
 
-int
-parse_args(int argc, char * argvi[]) {
-    int flags = 0;
-    struct option long_optons [] = {
+struct flag *
+parse_args(int argc, char * argv[]) {
+    int c = -1;
+    int option_index = 0;
+    const char * optstring = "iw:d:a:vh";
+    struct flag * result = NULL;
+    struct option long_options [] = {
         /*   name     /    arguments     / flag / val */
         {"interactive", no_argument      , NULL, 'i'},
         {"word"       , required_argument, NULL, 'w'},
         {"definition" , required_argument, NULL, 'd'},
         {"acronym"    , required_argument, NULL, 'a'},
         {"version"    , no_argument      , NULL, 'v'},
-        {"help"       , no_argument      , NULL, 'h'}
+        {"help"       , no_argument      , NULL, 'h'},
+        { NULL        , 0                , NULL,  0 }
+    };
+
+    result = malloc(sizeof *result);
+    if (result == NULL) goto err;
+    
+    opterr = 0; /* Pas de rapport d'erreurs. */ 
+    optind = 1;
+    while ((c = getopt_long(argc, argv, optstring,
+            long_options, &option_index)) != EOF) {
+        switch (c) {
+            case 'i':
+                result->flags |= F_INTERACTIVE;
+                break;
+            case 'w':
+                result->flags |= F_WORD;
+                result->word = optarg;
+                break;
+            case 'd':
+                result->flags |= F_DEFINITION;
+                result->definitions = optarg;
+                break;
+            case 'a':
+                result->flags |= F_ACRONYM;
+                result->acronyms = optarg;
+                break;
+            case 'v':
+                result->flags |= F_VERSION;
+                break;
+            case 'h':
+            default :
+                result->flags |= F_HELP;
+        }
     }
 
+    return result;
     
+    err:
+        return NULL;
 }
 
 int
 main (int argc, char * argv[]) {
+    struct flag * options = NULL;
     setlocale(LC_ALL, "");
-    
-    
+
+    if (argc < 2) {
+        usage();
+    } else {
+        options = parse_args(argc, argv);
+        if (options == NULL)
+            return EXIT_FAILURE;
+
+        
+
+        free(options);
+    }
 
     return EXIT_SUCCESS;
 }
