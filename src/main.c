@@ -6,6 +6,7 @@
 #include <wchar.h>
 
 #include "bloom_filter.h"
+#include "tuple.h"
 
 #define VERSION_NO          ???
 #define VERSION_STR(s)      L ## #s
@@ -25,6 +26,18 @@ struct flag {
     char * acronyms;
     char * definitions;
 };
+
+struct tuple {
+    void ** fst;
+    void ** snd;
+};
+
+struct tuple_list {
+    struct tuple val;
+    struct tuple_list * next;
+};
+
+struct tuple_list * load_dictionary(char *, char *, struct tuple_list *);
 
 void
 usage (void) {
@@ -52,7 +65,7 @@ n pour un.";
 
 void
 version (void) {
-    wchar_t * fmt = L"wtf. version %ls.";
+    wchar_t * fmt = L"wtf. version %ls.\n";
     wchar_t * ver = VERSION(VERSION_NO);
 
     wprintf(fmt, ver);
@@ -116,6 +129,8 @@ parse_args(int argc, char * argv[]) {
 int
 main (int argc, char * argv[]) {
     struct flag * options = NULL;
+    struct tuple_list * dicos = NULL;
+
     setlocale(LC_ALL, "");
 
     if (argc < 2) {
@@ -124,9 +139,34 @@ main (int argc, char * argv[]) {
         options = parse_args(argc, argv);
         if (options == NULL)
             return EXIT_FAILURE;
-
         
+        /* Traitement des options */
+        if (options->flags & F_HELP) {
+            usage();
+            return EXIT_SUCCESS;
+        } else if (options->flags & F_VERSION) {
+            version();
+            return EXIT_SUCCESS;
+        }
 
+        if ((options->flags & F_DEFINITION) || (options->flags & F_ACRONYM)) {
+            if ((options->flags & F_DEFINITION) && (options->flags & F_ACRONYM)) {
+                dicos = load_dictionary(options->acronyms, options->definitions, dicos);
+            } else if (!(options->flags & F_INTERACTIVE)) {
+                perror("acronym's and definition's files are both needed "
+                       "unless you set up interactive mode.");
+                return EXIT_SUCCESS;
+            }
+        }
+
+        if (options->flags & F_WORD) {
+            /* search dico and print answer */
+        } else if (options->flags & F_INTERACTIVE) {
+            interactive_mode(dicos);
+        } else {
+            perror("Nothing to be done!");
+        }
+    
         free(options);
     }
 
