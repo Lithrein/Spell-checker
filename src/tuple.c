@@ -3,11 +3,13 @@
 
 #include "tuple.h"
 
+#ifdef DEBUG_MODE
+#include <stdio.h>
+#endif
+
 struct tuple_list *
 tl_cons (struct tuple _val, struct tuple_list * queue) {
     struct tuple_list * head = NULL;
-
-    /* Having a copy could be great */
 
     if (!(head = malloc(sizeof *head))) {
 	perror("tl_cons can't allocate memory !");
@@ -48,14 +50,31 @@ tl_free (struct tuple_list * list) {
     }
 
     free(list);
-i}
+}
 
 #ifdef DEBUG_MODE
 
 int
 main (void) {
-    /* Test */
+    int i;
+    struct tuple t = { (void *)1, (void *)1};
+    struct tuple_list * list = NULL;
+
+    for (i = 0 ; i < 5 ; ++i) {
+    	void * tmp = t.snd;
+	list = tl_cons(t, list);
+    	t.snd =  (int) t.fst + (int) t.snd;
+	t.fst =  tmp;
+    }
+
+    TL_FOREACH(list)
+	printf("fst = %d\tsnd = %d\n", (int) _fst, (int) _snd);
+    TL_FOREACH_END(list);
+
+    tl_free(list);
+
+    return 0;
 }
 
-#endi
+#endif
 
