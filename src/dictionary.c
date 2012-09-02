@@ -1,7 +1,8 @@
 #include <stdlib.h>
+#include <stdio.h>
 
+#include "tuple.h"
 #include "dictionary.h"
-
 
 /**
 
@@ -15,11 +16,12 @@ nouvelle_liste = ( words, definitions ) :: ancienne_liste
 */
 struct tuple_list *
 load_dictionary (const char * words, const char * definitions, struct tuple_list * dicos) {
-    FILE * words_file, definitions_file;
+    FILE * words_file, * definitions_file;
     struct tuple new_dico;
-    struct * tuple_list new_list;
+    struct tuple_list * new_list;
 
-    words_file = definitions_file = new_list = NULL;
+    words_file = definitions_file = NULL;
+    new_list = NULL;
 
     words_file = fopen(words, "r");
     if (words_file == NULL) {
@@ -45,16 +47,32 @@ load_dictionary (const char * words, const char * definitions, struct tuple_list
 
 void
 clear_dictionaries (struct tuple_list * dicos) {
-    struct tuple * elem = NULL;
+    struct tuple_list * elem = NULL;
 
     while (dicos != NULL) {
         elem = dicos->next;
 
-        fclose(dicos->fst), dicos->fst = NULL;
-        fclose(dicos->snd), dicos->snd = NULL;
+        fclose(dicos->val.fst), dicos->val.fst = NULL;
+        fclose(dicos->val.snd), dicos->val.snd = NULL;
         free(dicos), dicos = NULL;
 
         dicos = elem;
     }
 }
+
+#ifdef DEBUG_MODE_DICTIONARY
+
+int
+main (void) {
+    int i;
+    char str[100] = {0};
+    struct tuple_list * dicos = NULL;
+
+    dicos = load_dictionary("wtf", "define", dicos);
+    clear_dictionaries(dicos);
+
+    return 0;
+}
+
+#endif 
 

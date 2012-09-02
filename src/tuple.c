@@ -3,7 +3,7 @@
 
 #include "tuple.h"
 
-#ifdef DEBUG_MODE
+#ifdef DEBUG_MODE_TUPLE
 #include <stdio.h>
 #endif
 
@@ -51,7 +51,7 @@ tl_free (struct tuple_list * list) {
 
 }
 
-#ifdef DEBUG_MODE
+#ifdef DEBUG_MODE_TUPLE
 
 int
 main (void) {
