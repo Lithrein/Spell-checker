@@ -6,6 +6,7 @@
 #include <wchar.h>
 
 #include "bloom_filter.h"
+#include "dictionary.h"
 #include "tuple.h"
 
 #define VERSION_NO          ???
@@ -26,18 +27,6 @@ struct flag {
     char * acronyms;
     char * definitions;
 };
-
-struct tuple {
-    void ** fst;
-    void ** snd;
-};
-
-struct tuple_list {
-    struct tuple val;
-    struct tuple_list * next;
-};
-
-struct tuple_list * load_dictionary(char *, char *, struct tuple_list *);
 
 void
 usage (void) {
