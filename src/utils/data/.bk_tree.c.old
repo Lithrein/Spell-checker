@@ -1,0 +1,191 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "bk_tree.h"
+#include "levenshtein.h"
+
+static void print_list(LIST_NAME(string) l) {
+    LIST_FOREACH(string, l)
+        printf("%s\n", LIST_HEAD(_list));
+    LIST_FOREACH_END;
+    fflush(stdout);
+}
+
+static int
+nb_elem (struct bk_tree * tree) {
+    int nb = 0;
+    if (!tree) return nb;
+
+    LIST_FOREACH(bk_arc, tree->sons)
+        nb += 1 + nb_elem(LIST_HEAD(_list)->son);
+        printf("%s", LIST_HEAD(_list)->son->word);
+    LIST_FOREACH_END;
+    puts("");
+    
+    return nb;
+}
+
+struct bk_tree *
+bk_tree_create (void) {
+    return NULL;
+}
+
+static struct bk_tree *
+insert_son (const char * word, int dist, struct bk_tree * tree) {
+    LIST_NAME(bk_arc) cur = tree->sons;
+    LIST_NAME(bk_arc) prev = tree->sons;
+
+    if (!cur) {
+        struct bk_arc * elem = NULL;
+        
+        if (!(elem = calloc(1, sizeof *elem)))
+            goto insert_son_err1;
+        
+        elem->dist = dist;
+        elem->son = bk_tree_add(word, NULL);
+
+        LIST_CONS(struct bk_arc *, bk_arc, elem, tree->sons);
+    } else {
+        while(cur && LIST_HEAD(cur)->dist <= dist) {
+            prev = cur;
+            cur = LIST_TAIL(cur);
+        }
+    
+        if (!cur) {
+            LIST_NAME(bk_arc) elem = NULL;
+        
+            if (!(elem = calloc(1, sizeof *elem)))
+                goto insert_son_err1;
+
+            if (!(LIST_HEAD(elem) = calloc(1, sizeof *LIST_HEAD(elem))))
+                goto insert_son_err2;
+        
+            LIST_HEAD(elem)->dist = dist;
+            LIST_HEAD(elem)->son = bk_tree_add(word, NULL);
+
+            LIST_TAIL(prev) = elem;
+        } else if (LIST_HEAD(cur)->dist == dist) {
+            LIST_HEAD(cur)->son = bk_tree_add(word, LIST_HEAD(cur)->son);
+        } else {
+            LIST_NAME(bk_arc) elem = NULL;
+        
+            if (!(elem = calloc(1, sizeof *elem)))
+                goto insert_son_err1;
+        
+            if(!(LIST_HEAD(elem) = calloc(1, sizeof *(LIST_HEAD(elem)))))
+                goto insert_son_err2;
+
+            LIST_HEAD(elem)->dist = dist;
+            LIST_HEAD(elem)->son = bk_tree_add(word, NULL);
+
+            LIST_TAIL(elem) = LIST_TAIL(cur);
+            LIST_TAIL(cur) = elem;
+        }
+    }
+    return tree;
+
+    insert_son_err2:
+    insert_son_err1:
+        return tree;
+}
+
+struct bk_tree *
+bk_tree_add (const char * word, struct bk_tree * tree) {
+    if (!tree) {
+        int word_len = strlen(word);
+
+        if (!(tree = calloc(1, sizeof *tree)))
+            goto bk_tree_add_err1;
+        if (!(tree->word = calloc(word_len + 1, sizeof *(tree->word))))
+            goto bk_tree_add_err2;
+
+        strcpy(tree->word, word);
+        tree->sons = NULL;
+    } else {
+        int dist;
+
+        dist = levenshtein(word, tree->word);
+        tree = insert_son(word, dist, tree);
+    }
+    
+    return tree;
+    
+    bk_tree_add_err2:
+        free(tree), tree = NULL;
+    bk_tree_add_err1:
+        return NULL;
+}
+
+struct bk_tree *
+bk_tree_add_dictionary (FILE * dict, struct bk_tree * tree) {
+   char str[101] = {0};
+
+    while (fgets(str, 100, dict)) {
+        int i;
+        for (i = 0 ; i < 100 ; ++i)
+            if (str[i] == '\n') str[i] = '\0';
+        tree = bk_tree_add(str, tree);
+    }
+
+    return tree;
+}
+
+void
+bk_tree_destroy (struct bk_tree * tree) {
+    if (!tree) return;
+
+    free(tree->word), tree->word = NULL;
+
+    LIST_FOREACH(bk_arc, tree->sons)
+        bk_tree_destroy(LIST_HEAD(_list)->son);
+        free(LIST_HEAD(_list)), LIST_HEAD(_list) = NULL;
+    LIST_FOREACH_END;
+    
+    LIST_FREE(bk_arc, tree->sons);
+
+    free(tree), tree = NULL;
+}
+
+LIST_NAME(string)
+bk_search(const char * word, int range, struct bk_tree * tree) {
+    LIST_NAME(string) res = NULL;
+    int dist;
+
+    if (!tree) return NULL;
+
+    dist = levenshtein(word, tree->word);
+    
+    if (dist <= range) {
+        LIST_CONS(char *, string, tree->word, res);
+    }
+
+    LIST_FOREACH(bk_arc, tree->sons)
+        int son_dist = LIST_HEAD(_list)->dist;
+        if (dist - range <= son_dist && son_dist <= dist + range) {
+            LIST_NAME(string) tmp = NULL;
+            
+            tmp = bk_search(word, range, LIST_HEAD(_list)->son);
+
+            if (!res) res = tmp;
+            else LIST_CONCAT(char *, string, res, tmp);
+        }
+    LIST_FOREACH_END;
+
+    return res;
+}
+
+int
+main() {
+    FILE * dict = fopen("dict.txt", "r");
+    struct bk_tree * tree = bk_tree_add_dictionary(dict, NULL);
+    /*LIST_NAME(string) res = bk_search("ar", 1, tree);
+    
+    print_list(res);
+
+    LIST_FREE(string, res);*/
+    bk_tree_destroy(tree);
+    fclose(dict);
+
+    return 0;
+}
+

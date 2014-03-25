@@ -1,0 +1,27 @@
+#ifndef H_BK_TREE
+#define H_BK_TREE
+
+#include "list.h"
+
+LIST_DEFINITION(char *, string);
+LIST_DEFINITION(struct bk_arc *, bk_arc);
+
+struct bk_tree {
+    char * word;
+    LIST_NAME(bk_arc) sons;
+};
+
+struct bk_arc {
+    int dist;
+    struct bk_tree * son;
+};
+
+struct bk_tree * bk_tree_create (void);
+struct bk_tree * bk_tree_add (const char *, struct bk_tree *);
+struct bk_tree * bk_tree_add_dictionary (FILE *, struct bk_tree *);
+void bk_tree_destroy (struct bk_tree *);
+
+LIST_NAME(string) bk_search (const char *, int, struct bk_tree *);
+
+#endif /* H_BK_TREE */
+

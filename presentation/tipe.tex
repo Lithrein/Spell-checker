@@ -1,0 +1,528 @@
+\documentclass[gray,slidestop,compress,mathserif,smaller,fleqn]{beamer}
+\usetheme{Antibes}
+
+\usepackage{tikz}
+\usepackage{listings}
+\usepackage{amsthm} % pour les maths
+\usepackage{amsmath} %%
+\usepackage{amssymb} %%
+\usepackage{mathrsfs} %%
+\usepackage[francais]{babel}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+
+\setbeamertemplate{navigation symbols}{}
+
+\lstset{language=Caml,numbers=left,frameround=fttt}
+\defverbatim\command\{listing}
+
+\title{Un correcteur orthographique efficace}
+\subtitle{Comment cela peut-il \^etre mis en oeuvre ?}
+\author{Paul IANNETTA}
+\institute{}
+\date{}
+
+\begin{document}
+
+\frame{\titlepage}
+
+\section*{Table des matières}
+\frame{\tableofcontents}
+
+\section{Comparaison de mots}
+\subsection{La distance de Levenshtein}
+\begin{frame}
+  \begin{block}{Définition (Distance de Levenshtein)}
+    La \alert{distance de Levenshtein} $ \mathcal{L} $ est une application de $ \mathcal{A^*} \times \mathcal{A^*} \longmapsto \mathbb{N} $ définie par :
+    \begin{eqnarray*}
+     \mathcal{L}(w_1, w_2) = \min(&c + \mathcal{L}(w_1', w_2'), & \text{substitution} \\
+                                  &1 + \mathcal{L}(w_1, w_2'),  & \text{ajout} \\
+                                  &1 + \mathcal{L}(w_1', w_2)   & \text{suppression} \\
+                           )      &                             &
+    \end{eqnarray*}
+    Avec $ w_1 = aw_1' $, $ w_2 = bw_2' $ et $c = 0$ si $a = b$ ou $ 1 $ sinon.
+  \end{block}
+  
+  \begin{block}{Proposition}
+    Complexité temporelle : 
+    $ \mathcal{L}(w_1, w_2) \in \mathcal{O}(|w_1||w_2|) $
+  \end{block}
+  
+  \begin{block}{Théorème}
+    Le couple $(\mathcal{A}^*, \mathcal{L})$ est un espace métrique.
+  \end{block}
+\end{frame}
+
+\begin{frame}
+  \begin{block}{Démonstration}
+    \begin{itemize}
+    \item Positivité : $\mathcal{L}(w_1, w_2) \geq 0 $
+    \item Séparation : $\mathcal{L}(w_1, w_2) = 0 \Longrightarrow w_1 = w_2$
+    \item Symétrie : $\mathcal{L}(w_1, w_2) = \mathcal{L}(w_2, w_1)$
+    \item Inégalité triangulaire : $\mathcal{L}(w_1, w_3) \leq \mathcal{L}(w_1, w_2) + \mathcal{L}(w_2, w_3)$
+    \end{itemize}
+    Le cas d'égalité a lieu si $ w_2 = w_1 $ ou $ w_2 = w_3 $.\\
+    L'autre cas se prouve par récurrence sur la longueur de $ w_2 $ que l'on note $ n = |w_2| $.\\
+    Pour $ n = 0 $, c'est vrai : $\mathcal{ L}(w_1, w_3) \leq |w_1| + |w_3|$\\
+    Soit $ n \in \mathbb{N} $ tel que l'inégalité triangulaire soit vraie.\\
+    \begin{eqnarray*}
+      \mathcal{L}(w_1, w_2) + \mathcal{L}(w_1, w_3) &=& \mathcal{L}(w_1, w_2') + \mathcal{L}(w_2', w_3)\\
+                                                    &\geq& \mathcal{L}(w_1, w_3)
+    \end{eqnarray*}
+    L'inégalité triangulaire est vraie pour tout $ w_2 \in \mathcal{A^*}$.
+  \end{block}
+\end{frame}
+
+\frame[shrink, containsverbatim]{
+  \begin{lstlisting}
+#define MAX_LEN 42
+#define min3(a,b,c) ((a)<(b)?((a)<(c)?(a):(c)):((b)<(c)?(b):(c)))
+
+int
+levenshtein (char * src, char * dst) {
+    int dist[MAX_LEN + 1][MAX_LEN + 1] = {0};
+    int i, j, len_src, len_dst;
+
+    len_src = strlen(src);
+    len_dst = strlen(dst);
+
+    for (i = 0 ; i < MAX_LEN ; ++i)
+        dist[i][0] = i;
+    for (j = 0 ; j < MAX_LEN ; ++j)
+        dist[0][j] = j;
+
+    for (i = 0 ; i < len_src ; ++i)
+        for (j = 0 ; j < len_dst ; ++j) {
+
+            dist[i + 1][j + 1] = min3(
+                                    dist[i][j + 1] + 1,
+                                    dist[i + 1][j] + 1,
+                                    dist[i][j] + (src[i] != dst[j])
+                                 );
+        }
+
+    return dist[len_src][len_dst];    
+}
+  \end{lstlisting}
+}
+
+\section{La méthode naïve}
+\subsection{Le principe}
+
+\frame{
+  Il s'agit de calculer la distance de Levenshtein d'un mot avec tous les autres mots du dictionnaire.\\[2em]
+  Avantage :
+  \begin{itemize}
+    \item Mise en oeuvre aisée et rapide
+  \end{itemize}
+ Inconvénient :
+ \begin{itemize}
+    \item Cette méthode est très lente en raison d'un grand nombre de calculs.
+  \end{itemize} 
+}
+\section{Une première amélioration}
+\subsection{Les filtres de Bloom}
+\frame{
+  \textbf{Objectifs : } Limiter les accès au dictionnaire.
+  
+  \begin{block}{Définition (Filtre de Bloom)}
+    Un \alert{filtre de Bloom} est un vecteur ligne à valeurs dans $\mathbb{Z}/2\mathbb{Z}$.
+  \end{block}
+  
+  Principe de construction :
+  \begin{itemize}
+    \item La longueur du vecteur vaut $ m $.
+    \item Il utilise $ k $ fonctions de hachage. ($h_i : \mathcal{A^*} \longrightarrow \mathbb{N}$)
+    \item Il représente $ n $ éléments.
+  \end{itemize}
+  
+\begin{figure}
+  \begin{center}
+  \begin{tikzpicture}[scale=.5]
+    \draw (0, 0) -- (4, 0);
+    \draw [dashed] (4,0) -- (5, 0);
+    \draw [dashed] (6, 0) -- (7, 0);
+    \draw (7,0) -- (10, 0);
+    
+    \draw (0, 1) -- (4, 1);
+    \draw [dashed] (4,1) -- (5, 1);
+    \draw [dashed] (6, 1) -- (7, 1);
+    \draw (7,1) -- (10, 1);   
+    
+    \draw (0, 0) -- (0, 1);
+    \draw (1, 0) -- (1 ,1);
+    \draw (2, 0) -- (2 ,1);
+    \draw (3, 0) -- (3 ,1);
+    \draw [dashed] (4, 0) -- (4 ,1);
+    \draw [dashed] (7, 0) -- (7 ,1);
+    \draw (8, 0) -- (8 ,1);
+    \draw (9, 0) -- (9 ,1);
+    \draw (10, 0) -- (10 ,1);
+    
+    \draw (.5, 0) node[below]{$1$};
+    \draw (1.5, 0) node[below]{$2$};
+    \draw (2.5, 0) node[below]{$3$};
+    \draw (3.5, 0) node[below]{$4$};
+    \draw (5.5, .5) node{$\dots$};
+    \draw (9.5, 0) node[below]{$m$};
+    
+    \draw (0.5,.5) node{$0$};
+    \draw (1.5,.5) node{$0$};
+    \draw (2.5,.5) node{$1$};
+    \draw (3.5,.5) node{$0$};
+    \draw (7.5,.5) node{$1$};
+    \draw (8.5,.5) node{$1$};
+    \draw (9.5,.5) node{$0$};
+  \end{tikzpicture}
+  \end{center}
+\end{figure}
+  
+  \begin{block}{Théorème}
+    La probabilité d'obtenir un faux positif est de l'ordre de $(1-e^{-\frac{kn}{m}})^k$.
+  \end{block}
+}
+
+\frame{
+  \begin{block}{Démonstration}
+    On suppose qu'une fonction de hashage donne un nombre entre $ 0 $ et $ m $ de manière équiprobable. \\
+    La probabilité qu'un bit soit à $ 1 $ est $\frac{1}{m}$ et celle qu'il soit à $ 0 $ est de $1 - \frac{1}{m}$.\\
+    Or, on utilise $ k $ fonctions de hashage que l'on applique à $ n $ éléments. Cette probabilité devient donc $\left(1 - \frac{1}{m}\right)^{kn}$.\\[2em]
+    
+    La probabilité d'avoir un faux positif est donc de :
+    
+      $$\left(1 - \left(1 - \frac{1}{m}\right)^{kn}\right)^k = 
+          \left(1 - \left(1 - \frac{\frac{kn}{m}}{kn}\right)^{kn}\right)^k \stackrel{\sim}{\tiny{\text{$kn_\infty$}}} \left(1-e^{-\frac{kn}{m}}\right)^k$$
+  \end{block}
+}
+
+\section{De nouvelles idées}
+\subsection{Les BK-Tree}
+\frame{
+  \begin{block}{Définition (Burkhard-Keller Trees)}
+  Les \alert{BK-Trees}  sont des arbres n-aires à valeurs dans un espace métrique. \\
+  Ils vérifient la propriété suivante :
+  
+  Tous les mots d'un sous-arbre sont à la même distance de la racine du sous-arbre au sens de la distance de Levenshtein.
+  \end{block}
+  
+  \begin{figure}\begin{center}
+   \begin{tikzpicture}[scale=.75]
+    \tikzset{noeud/.style={draw,rectangle,rounded corners=3pt}}
+  
+    \node[noeud] (A) at (1,0) {a};
+    
+    \node[noeud] (B) at (-3,-3) {b};
+    \node[noeud] (C) at (-1,-3) {art};
+    \node[noeud] (D) at (1,-3) {beau};
+    \node[noeud] (E) at (3.5,-3) {amical};
+    \node[noeud] (F) at (7,-3) {artiste};
+    
+    \node[noeud] (G) at (-1,-5) {ami};
+    \node[noeud] (H) at (1,-5) {bien};
+    
+    \draw[->, >=latex] (A) -- (B) node[pos=.5, above left]{$1$};
+    \draw[->, >=latex] (A) -- (C) node[pos=.5, left]{$2$};
+    \draw[->, >=latex] (A) -- (D) node[pos=.5, left]{$4$};
+    \draw[->, >=latex] (A) -- (E) node[pos=.5, right]{$5$};
+    \draw[->, >=latex] (A) -- (F) node[pos=.5, above right]{$6$};
+    
+    \draw[->, >=latex] (C) -- (G) node[pos=.7, above left]{$2$};
+    \draw[->, >=latex] (D) -- (H) node[pos=.7, above left]{$2$};
+   \end{tikzpicture}
+  \end{center}\end{figure}
+
+  \texttt{dict = \{a, art, ami, amical, artiste, b, beau, bien}\}.
+}
+
+\frame[shrink,containsverbatim]{
+\begin{lstlisting}
+LIST_NAME(string)
+bk_tree_search (const char * word, int range, struct bk_tree * tree) {
+    LIST_NAME(string) res = NULL;
+    int dist, i;
+
+    if (!tree) return NULL;
+
+    dist = levenshtein(word, tree->word);
+    
+    if (dist <= range)
+        LIST_CONS(char *, string, tree->word, res);
+
+    for (i = 0 ; i < NB_SONS ; ++i) {
+        int son_dist = tree->sons[i].dist;
+        if (dist - range <= son_dist && son_dist <= dist + range) {
+            LIST_NAME(string) tmp = NULL;
+            
+            tmp = bk_tree_search(word, range, tree->sons[i].son);
+
+            if (!res) res = tmp;
+            else LIST_CONCAT(char *, string, res, tmp);
+        }
+    }
+
+    return res;
+}
+\end{lstlisting}
+}
+
+\frame[shrink]{
+  \begin{block}{Démonstration (Preuve de correction)}
+    Un raisonnement par récurrence montre que ce parcours en profondeur de l'arbre termine effectivement.\\[1em]
+    Montrons pour cela que les sous-arbres éludés ne contenaient pas de potentiels candidats.\\
+    On cherche les mots à une distance \textbf{inférieure ou égale à} $ r $ d'un mot $ w $.\\[1em]
+    
+    Soit $\mathfrak{M}(A)$ l'ensemble des mots contenus dans l'arbre $A$.\\
+    Soit $d = \mathcal{L}(w, A.mot)$.\\
+    Soit $A_1$ un sous-arbre de $ A $ tel que :
+    $$ \forall m \in \mathfrak{M}(A_1),~\mathcal{L}(m, A.mot) = d + r + 1.$$
+    
+    $\forall m \in \mathfrak{M}(A_1),~d + r + 1 = \mathcal{L}(m, A.mot)$\\
+    $\forall m \in \mathfrak{M}(A_1),~d + r + 1 \leq \mathcal{L}(m, w) + \mathcal{L}(w, A.mot)$\\
+    $\forall m \in \mathfrak{M}(A_1),~\mathcal{L}(m, w) \geq r + 1$\\[1em]
+    
+    Si $\mathcal{L}(m, A.mot) = d - (r + 1)$, $|\mathcal{L}(a.mot, w) - \mathcal{L}(w, m)| \leq \mathcal{L}(a.mot, m)$.
+  \end{block}
+}
+
+\subsection{Les automates de Levenshtein}
+\frame{
+  \begin{block}{Définition (Automate de Levenshtein)}
+  L'\alert{automate de Levenshtein} d'un mot est un automate qui reconnait seulement les mots ayant une distance de Levenshtein inférieure ou égale à un entier $ n $ fixé.\\
+  $$\text{Lev}_n(m) = \{ w \in \mathcal{A}^{*}~:~\mathcal{L}(m, w) \leq n\}$$
+  \end{block}
+  
+  \begin{figure}\begin{center}
+  \begin{tikzpicture}[scale=0.5]
+    \tikzset{normal/.style={draw,circle},
+             initial/.style={draw,circle, dashed},
+             final/.style={draw,circle,very thick}}
+  
+    \node[initial] (A) at (0,0) {$0^0$};
+    \node[normal] (B) at (5,0) {$1^0$};
+    \node[normal] (C) at (10,0) {$2^0$};
+    \node[normal] (D) at (15,0) {$3^0$};
+    \node[final] (E) at (20,0) {$4^0$};
+    
+    \node[normal] (F) at (0,3) {$0^1$};
+    \node[normal] (G) at (5,3) {$1^1$};
+    \node[normal] (H) at (10,3) {$2^1$};
+    \node[normal] (I) at (15,3) {$3^1$};
+    \node[final] (J) at (20,3) {$4^1$};
+    
+    \node[normal] (K) at (0,6) {$0^2$};
+    \node[normal] (L) at (5,6) {$1^2$};
+    \node[normal] (M) at (10,6) {$2^2$};
+    \node[normal] (N) at (15,6) {$3^2$};
+    \node[final] (O) at (20,6) {$4^2$};
+    
+    \draw[->, >=latex] (A) -- (B) node[midway, below]{$\stackrel{\text{\tiny{correspondance}}}{\text{c}}$};
+    \draw[->, >=latex] (A) -- (F) node[midway, left]{$\stackrel{\text{\tiny{ins}}}{*}$};
+    \draw[->, >=latex] (A) -- (G) node[pos=.4]{$\left\{\stackrel{\text{\tiny{subs}}}{*}, \stackrel{\text{\tiny{supp}}}{\epsilon}\right\}$};
+    \draw[->, >=latex] (F) -- (G) node[midway, above]{c};
+    \draw[->, >=latex] (F) -- (K) node[midway, left]{$*$};
+    \draw[->, >=latex] (F) -- (L) node[pos=.4, above]{$\{*, \epsilon\}$};
+    \draw[->, >=latex] (K) -- (L) node[midway, above]{c};
+  
+    \draw[->, >=latex] (B) -- (C) node[midway, above]{h};
+    \draw[->, >=latex] (B) -- (G) node[midway, left]{$*$};
+    \draw[->, >=latex] (B) -- (H) node[pos=.4, above]{$\{*, \epsilon\}$};
+    \draw[->, >=latex] (G) -- (H) node[midway, above]{h};
+    \draw[->, >=latex] (G) -- (L) node[midway, left]{$*$};
+    \draw[->, >=latex] (G) -- (M) node[pos=.4, above]{$\{*, \epsilon\}$};
+    \draw[->, >=latex] (L) -- (M) node[midway, above]{h};
+
+    \draw[->, >=latex] (C) -- (D) node[midway, above]{a};
+    \draw[->, >=latex] (C) -- (H) node[midway, left]{$*$};
+    \draw[->, >=latex] (C) -- (I) node[pos=.4, above]{$\{*, \epsilon\}$};
+    \draw[->, >=latex] (H) -- (I) node[midway, above]{a};
+    \draw[->, >=latex] (H) -- (M) node[midway, left]{$*$};
+    \draw[->, >=latex] (H) -- (N) node[pos=.4, above]{$\{*, \epsilon\}$};
+    \draw[->, >=latex] (M) -- (N) node[midway, above]{a};
+ 
+    \draw[->, >=latex] (D) -- (E) node[midway, above]{t};
+    \draw[->, >=latex] (D) -- (I) node[midway, left]{$*$};
+    \draw[->, >=latex] (D) -- (J) node[pos=.4, above]{$\{*, \epsilon\}$};
+    \draw[->, >=latex] (I) -- (J) node[midway, above]{t};
+    \draw[->, >=latex] (I) -- (N) node[midway, left]{$*$};
+    \draw[->, >=latex] (I) -- (O) node[pos=.4, above]{$\{*, \epsilon\}$};
+    \draw[->, >=latex] (N) -- (O) node[midway, above]{t};
+
+    \draw[->, >=latex] (E) -- (J) node[midway, left]{$*$};
+    \draw[->, >=latex] (J) -- (O) node[midway, left]{$*$};
+  \end{tikzpicture}
+  \end{center}\end{figure}
+}
+
+\frame{
+  \texttt{dict = \{a, art, ami, amical, artiste, b, beau, bien}\}.
+
+  \begin{figure}\begin{center}
+    \begin{tikzpicture}[scale=0.5]
+  
+  \tikzset{racine/.style={draw, circle, dashed},
+           noeud/.style={draw, circle},
+           fin/.style={draw, circle, very thick}};
+  
+  \node[racine] (Rac) at (0, 0) {$\square$};
+  
+  \node[noeud] (A) at (2, -1) {a};
+  \node[noeud] (B) at (2, 3) {b};
+  
+  \node[noeud] (Ar) at (4, -3) {r};
+  \node[noeud] (Art) at (6, -3) {t};
+  \node[fin] (Artf) at (6, -5) {};
+  \node[noeud] (Arti) at (8, -3) {i};
+  \node[noeud] (Artis) at (10, -3) {s};
+  \node[noeud] (Artist) at (12, -3) {t};
+  \node[noeud] (Artiste) at (14, -3) {e};
+  \node[fin] (Artistef) at (16, -3) {};
+  
+  
+  \node[noeud] (Am) at (4, 1) {m};
+  \node[noeud] (Ami) at (6, 1) {i};
+  \node[fin] (Amif) at (6, -1) {};
+  \node[noeud] (Amic) at (8, 1) {c};
+  \node[noeud] (Amica) at (10, 1) {a};
+  \node[noeud] (Amical) at (12, 1) {l};
+  \node[fin] (Amicalf) at (14, 1) {};
+  
+  
+  \node[noeud] (Be) at (4, 3) {e};
+  \node[noeud] (Bea) at (6, 3) {a};
+  \node[noeud] (Beau) at (8, 3) {u};
+  \node[fin] (Beauf) at (10, 3) {};
+  
+  \node[noeud] (Bi) at (4, 5) {i};
+  \node[noeud] (Bie) at (6, 5) {e};
+  \node[noeud] (Bien) at (8, 5) {n};
+  \node[fin] (Bienf) at (10, 5) {};
+  
+  \draw[->, >=latex] (Rac) -- (A);
+  \draw[->, >=latex] (Rac) -- (B);
+  \draw[->, >=latex] (A) -- (Ar);
+  \draw[->, >=latex] (Ar) -- (Art);
+  \draw[>=latex] (Art) -- (Artf);
+  \draw[->, >=latex] (Art) -- (Arti);
+  \draw[->, >=latex] (Arti) -- (Artis);
+  \draw[->, >=latex] (Artis) -- (Artist);
+  \draw[->, >=latex] (Artist) -- (Artiste);
+  \draw[>=latex] (Artiste) -- (Artistef);
+  \draw[->, >=latex] (A) -- (Am);
+  \draw[->, >=latex] (Am) -- (Ami);
+  \draw[>=latex] (Ami) -- (Amif);
+  \draw[->, >=latex] (Ami) -- (Amic);
+  \draw[->, >=latex] (Amic) -- (Amica);
+  \draw[->, >=latex] (Amica) -- (Amical);
+  \draw[>=latex] (Amical) -- (Amicalf);
+  \draw[->, >=latex] (B) -- (Bi);
+  \draw[->, >=latex] (Bi) -- (Bie);
+  \draw[->, >=latex] (Bie) -- (Bien);
+  \draw[>=latex] (Bien) -- (Bienf);
+  \draw[->, >=latex] (B) -- (Be);
+  \draw[->, >=latex] (Be) -- (Bea);
+  \draw[->, >=latex] (Bea) -- (Beau);
+  \draw[>=latex] (Beau) -- (Beauf);
+  \end{tikzpicture}
+  \end{center}\end{figure}
+}
+
+\section{Quelques chiffres}
+  
+\frame{
+  Nombre de mots du dictionnaire : $324~476$ mots.\\
+  
+  \begin{table}\begin{center}
+    \begin{tabular}{|c|c|c|c|}
+      \hline
+                        & Filtre de Bloom        & BK-Tree      & Naïve   \\
+      \hline
+      Création          & 0 s                    & 5 s          & -       \\
+      \hline            
+      Place             & (300 Ko) Paramétrable  & 150 Mo       & -       \\
+      \hline\hline
+      \multicolumn{3}{|l|}{Recherche et suggestions (mots/s)}             \\
+      \hline
+      $\mathcal{L}$ = 1 & -                      & 1000 - 10000 & 1       \\
+      \hline
+      $\mathcal{L}$ = 2 & -                      & 100 - 1000   & $"$     \\
+      \hline
+      $\mathcal{L}$ = 3 & -                      & 75 - 100     & $"$     \\
+      \hline
+      $\mathcal{L}$ = 4 & -                      & 30 - 40      & $"$     \\
+      \hline
+    \end{tabular}
+  \end{center}\end{table}
+}
+
+\section{Quelques idées pour faire encore mieux}
+\frame{
+  Modifier la fonction de distance :
+  \begin{itemize}
+    \item Transposition.
+    \item Lettres adjacentes sur un clavier.
+    \item Lettres ayant des prononciations similaires.
+  \end{itemize}\\[1em]
+  
+  Réduire la taille du dictionnaire pour les automates de Levenshtein :
+  \begin{itemize}
+    \item Utilisation d'un graphe acyclique orienté PATRICIA.
+  \end{itemize}
+  
+\begin{figure}\begin{center}
+  \begin{tikzpicture}[scale=0.5]
+  
+  \tikzset{racine/.style={draw, circle, dashed},
+           noeud/.style={draw, rectangle},
+           fin/.style={draw, circle, very thick}};
+  
+  \node[racine] (Rac) at (0, 0) {$\square$};
+  
+  \node[noeud] (A) at (2, -1) {a};
+  \node[noeud] (B) at (2, 3) {b};
+  \node[noeud] (Art) at (4, -3) {rt};
+  \node[noeud] (Artiste) at (6, -3) {iste};
+  \node[noeud] (Ami) at (4, 1) {mi};
+  \node[noeud] (Amical) at (6, 1) {cal};
+  \node[noeud] (Beau) at (4, 3) {eau};
+  \node[noeud] (Bien) at (4, 5) {ien};
+  \node[fin] (Fin) at (10, 1) {};
+  
+  \draw[->, >=latex] (Rac) -- (A);
+  \draw[->, >=latex] (Rac) -- (B);
+  \draw[->, >=latex] (A) -- (Art);
+  \draw[>=latex] (Art) to[bend left] (Fin);
+  \draw[->, >=latex] (Art) -- (Artiste);
+  \draw[>=latex] (Artiste) to[bend right] (Fin);
+  \draw[->, >=latex] (A) -- (Ami);
+  \draw[>=latex] (Ami) to[bend left] (Fin);
+  \draw[->, >=latex] (Ami) -- (Amical);
+  \draw[>=latex] (Amical) -- (Fin);
+  \draw[->, >=latex] (B) -- (Bien);
+  \draw[>=latex] (Bien) to[bend left] (Fin);
+  \draw[->, >=latex] (B) -- (Beau);
+  \draw[>=latex] (Beau) to[bend left] (Fin);
+  \end{tikzpicture}
+  \end{center}\end{figure}
+  
+  \texttt{dict = \{a, art, ami, amical, artiste, b, beau, bien}\}.
+}
+
+\section*{Références}
+\frame{
+  ~\\[2em]
+  \begin{itemize}
+  \item Compilateurs, techniques, principes et outils. 2\up{e} édition \\[2em]
+  \item Wikipédia (Angaise et Française) :
+    \begin{itemize}
+      \item Distance de Levenshtein.
+      \item Filtre de Bloom.\\[2em]
+    \end{itemize}
+  \item Nick's Blog (blog.notdot.net) -- Damn Cool Algorithms :
+    \begin{itemize}
+      \item Levenshtein Automata
+      \item BK-Trees
+    \end{itemize}
+  \end{itemize}
+}
+
+\end{document}
